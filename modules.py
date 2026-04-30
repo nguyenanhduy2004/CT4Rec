@@ -7,7 +7,7 @@ https://www.github.com/kyubyong/transformer
 '''
 
 from __future__ import print_function
-import tensorflow as tf
+from tf_compat import tf
 import numpy as np
 
 def get_shape_list(tensor):
@@ -74,10 +74,11 @@ def normalize(inputs,
     return outputs
 
 def layer_norm(input_tensor, name=None):
-        """Run layer normalization on the last dimension of the tensor."""
-        return tf.contrib.layers.layer_norm(
-            inputs=input_tensor, begin_norm_axis=-1, begin_params_axis=-1, scope=name,
-            variables_collections=["layer_norm", tf.GraphKeys.GLOBAL_VARIABLES])
+  """Run layer normalization on the last dimension of the tensor.
+
+  Uses the local `normalize` implementation to avoid tf.contrib dependency.
+  """
+  return normalize(input_tensor, scope=name)
 
 def embedding(inputs, 
               vocab_size, 
@@ -146,10 +147,10 @@ def embedding(inputs,
     '''
     with tf.variable_scope(scope, reuse=reuse):
         lookup_table = tf.get_variable('lookup_table',
-                                       dtype=tf.float32,
-                                       shape=[vocab_size, num_units],
-                                       initializer=tf.truncated_normal_initializer(stddev=0.02),
-                                       regularizer=tf.contrib.layers.l2_regularizer(l2_reg))
+                     dtype=tf.float32,
+                     shape=[vocab_size, num_units],
+                     initializer=tf.truncated_normal_initializer(stddev=0.02),
+                     regularizer=tf.keras.regularizers.l2(l2_reg) if l2_reg and l2_reg>0 else None)
         if zero_pad:
             lookup_table = tf.concat((tf.zeros(shape=[1, num_units]),
                                       lookup_table[1:, :]), 0)

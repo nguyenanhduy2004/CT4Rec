@@ -1,3 +1,4 @@
+from tf_compat import tf
 from modules import *
 
 
@@ -12,7 +13,7 @@ class Model():
         pos = self.pos
         neg = self.neg
         mask_bool = tf.not_equal(self.input_seq, 0)
-        mask = tf.expand_dims(tf.to_float(mask_bool), -1)
+        mask = tf.expand_dims(tf.cast(mask_bool, tf.float32), -1)
         batch_size = tf.shape(self.input_seq)[0]
 
         with tf.variable_scope("SASRec", reuse=tf.AUTO_REUSE):
@@ -78,7 +79,7 @@ class Model():
         self.test_logits = tf.reshape(self.test_logits, [batch_size, args.neg_test + 1])
         # =====================================loss==================================================
         # ignore padding items (0)
-        istarget = tf.reshape(tf.to_float(tf.not_equal(pos, 0)), [batch_size * args.maxlen])
+        istarget = tf.reshape(tf.cast(tf.not_equal(pos, 0), tf.float32), [batch_size * args.maxlen])
 
         with tf.variable_scope("basic_loss"):
             # prediction layer
@@ -196,12 +197,15 @@ class Model():
             batch_size, col_size = get_shape_list(sim)
             tn = batch_size // 2
             sim_t = sim / temperature
-            idx =tf.range(tn)
+            idx = tf.range(tn)
             idx = tf.reshape(tf.concat([idx + tn, idx], axis=-1), [-1, 1])
             if mask is not None:
                 sim_t += -100000 * mask
             prob_sim = tf.nn.softmax(sim_t, axis=-1)
-            diag_part_sim = tf.batch_gather(prob_sim, idx)
+            # Replace deprecated tf.batch_gather with gather_nd pattern
+            row_idx = tf.expand_dims(tf.range(tf.shape(prob_sim)[0]), 1)
+            full_idx = tf.concat([row_idx, idx], axis=1)
+            diag_part_sim = tf.gather_nd(prob_sim, full_idx)
             if weight is None:
                 loss = tf.reduce_mean(-tf.log(diag_part_sim))
             else:

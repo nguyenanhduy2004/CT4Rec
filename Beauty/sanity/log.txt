@@ -1,0 +1,2 @@
+epoch,time,val_NDCG@1,val_HR@1,val_NDCG@5,val_HR@5,val_NDCG@10,val_HR@10,val_NDCG@20,val_HR@20,test_NDCG@1,test_HR@1,test_NDCG@5,test_HR@5,test_NDCG@10,test_HR@10,test_NDCG@20,test_HR@20
+1.0,84.3,0.1893,0.1893,0.3129,0.4265,0.3545,0.5555,0.3906,0.6989,0.1613,0.1613,0.2771,0.3862,0.3178,0.5128,0.3559,0.6639

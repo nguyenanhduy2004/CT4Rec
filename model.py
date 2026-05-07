@@ -110,6 +110,7 @@ class Model():
         )
 
         # ===================== TEST =====================
+
         self.test_item = tf.placeholder(
             tf.int32,
             shape=(None, args.neg_test + 1)
@@ -141,7 +142,8 @@ class Model():
             [batch_size * args.maxlen]
         )
 
-        # ---------- BASIC LOSS 1 ----------
+        # ===================== BASIC LOSS 1 =====================
+
         with tf.variable_scope("basic_loss"):
 
             self.pos_logits = tf.reduce_sum(
@@ -168,12 +170,26 @@ class Model():
 
             prob_first = tf.nn.softmax(logits_first)
 
+            # ==================================================
+            # Confidence-aware weighting
+            # ==================================================
+
+            confidence_weight = tf.reduce_max(
+                prob_first,
+                axis=-1
+            )
+
+            confidence_weight = tf.stop_gradient(
+                confidence_weight
+            )
+
             self.loss_first = self.get_softmax_loss(
                 prob=prob_first,
                 is_target=istarget
             )
 
-        # ---------- BASIC LOSS 2 ----------
+        # ===================== BASIC LOSS 2 =====================
+
         with tf.variable_scope("basic_loss2"):
 
             self.pos_logits_second = tf.reduce_sum(
@@ -205,7 +221,8 @@ class Model():
                 is_target=istarget
             )
 
-        # ---------- FINAL BASIC LOSS ----------
+        # ===================== FINAL BASIC LOSS =====================
+
         if args.rd_alpha != 0.0:
             self.loss = (self.loss_first + self.loss_second) / 2.0
         else:
@@ -215,7 +232,11 @@ class Model():
 
         seq_bool = tf.reshape(mask_bool, [-1])
 
-        seq_emb_l2_not_pad = tf.boolean_mask(seq_emb_l2, seq_bool)
+        seq_emb_l2_not_pad = tf.boolean_mask(
+            seq_emb_l2,
+            seq_bool
+        )
+
         seq_emb_second_l2_not_pad = tf.boolean_mask(
             seq_emb_second_l2,
             seq_bool
@@ -231,7 +252,8 @@ class Model():
 
                 cosine_sim = (
                     tf.reduce_sum(
-                        seq_emb_l2_not_pad * seq_emb_second_l2_not_pad,
+                        seq_emb_l2_not_pad *
+                        seq_emb_second_l2_not_pad,
                         axis=-1
                     ) + 1
                 ) / 2.0
@@ -262,7 +284,9 @@ class Model():
 
             elif args.user_reg_type == 'kl':
 
-                tmp_size, _ = get_shape_list(seq_emb_l2_not_pad)
+                tmp_size, _ = get_shape_list(
+                    seq_emb_l2_not_pad
+                )
 
                 user_inner_match1 = (
                     tf.matmul(
@@ -282,8 +306,13 @@ class Model():
                     - 10000 * tf.eye(tmp_size)
                 )
 
-                user_inner_match_prob1 = tf.nn.softmax(user_inner_match1)
-                user_inner_match_prob2 = tf.nn.softmax(user_inner_match2)
+                user_inner_match_prob1 = tf.nn.softmax(
+                    user_inner_match1
+                )
+
+                user_inner_match_prob2 = tf.nn.softmax(
+                    user_inner_match2
+                )
 
                 user_inner_match_prob1 = tf.clip_by_value(
                     user_inner_match_prob1,
@@ -297,7 +326,6 @@ class Model():
                     1e10
                 )
 
-                # JS divergence version
                 self.ur_loss = self.get_r_dropout_loss(
                     user_inner_match_prob1,
                     user_inner_match_prob2,
@@ -307,11 +335,16 @@ class Model():
             elif args.user_reg_type == 'cl':
 
                 seq_emb_union = tf.concat(
-                    [seq_emb_l2_not_pad, seq_emb_second_l2_not_pad],
+                    [
+                        seq_emb_l2_not_pad,
+                        seq_emb_second_l2_not_pad
+                    ],
                     axis=0
                 )
 
-                con_mask = tf.eye(tf.shape(seq_emb_union)[0])
+                con_mask = tf.eye(
+                    tf.shape(seq_emb_union)[0]
+                )
 
                 con_sim = tf.matmul(
                     seq_emb_union,
@@ -328,7 +361,10 @@ class Model():
             else:
                 self.ur_loss = 0.0
 
-        self.loss += self.ur_loss * self.dynamic_con_alpha
+        self.loss += (
+            self.ur_loss *
+            self.dynamic_con_alpha
+        )
 
         # ===================== R-DROPOUT LOSS =====================
 
@@ -336,28 +372,61 @@ class Model():
 
             if args.rd_alpha > 0:
 
+                adaptive_weight = (
+                    istarget *
+                    confidence_weight
+                )
+
                 self.rd_loss = self.get_r_dropout_loss(
                     prob1=prob_first,
                     prob2=prob_second,
                     reduce=args.rd_reduce,
-                    w=istarget
+                    w=adaptive_weight
                 )
 
             else:
+
                 self.rd_loss = 0.0
 
-        self.loss += self.rd_loss * self.dynamic_rd_alpha
+        self.loss += (
+            self.rd_loss *
+            self.dynamic_rd_alpha
+        )
 
         # ===================== SUMMARY =====================
 
-        tf.summary.scalar('basic_loss', self.loss_first, family='loss')
-        tf.summary.scalar('loss', self.loss, family='loss')
-        tf.summary.scalar('ur_loss', self.ur_loss, family='loss')
-        tf.summary.scalar('rd_loss', self.rd_loss, family='loss')
+        tf.summary.scalar(
+            'basic_loss',
+            self.loss_first,
+            family='loss'
+        )
+
+        tf.summary.scalar(
+            'loss',
+            self.loss,
+            family='loss'
+        )
+
+        tf.summary.scalar(
+            'ur_loss',
+            self.ur_loss,
+            family='loss'
+        )
+
+        tf.summary.scalar(
+            'rd_loss',
+            self.rd_loss,
+            family='loss'
+        )
 
         self.auc = tf.reduce_sum(
             (
-                (tf.sign(self.pos_logits - self.neg_logits[:, :1]) + 1) / 2
+                (
+                    tf.sign(
+                        self.pos_logits -
+                        self.neg_logits[:, :1]
+                    ) + 1
+                ) / 2
             ) * tf.reshape(istarget, [-1, 1])
         ) / tf.reduce_sum(istarget)
 
@@ -372,10 +441,16 @@ class Model():
 
             tvars = tf.trainable_variables()
 
-            gvs = self.optimizer.compute_gradients(self.loss, tvars)
+            gvs = self.optimizer.compute_gradients(
+                self.loss,
+                tvars
+            )
 
             capped_gvs = [
-                (tf.clip_by_norm(grad, 8), var)
+                (
+                    tf.clip_by_norm(grad, 8),
+                    var
+                )
                 for grad, var in gvs
             ]
 
@@ -419,17 +494,24 @@ class Model():
             num_heads,
             reuse=None):
 
-        with tf.variable_scope("user_encoder", reuse=reuse):
+        with tf.variable_scope(
+                "user_encoder",
+                reuse=reuse):
 
             seq = tf.layers.dropout(
                 input_seq,
                 rate=dropout_rate,
-                training=tf.convert_to_tensor(self.is_training)
+                training=tf.convert_to_tensor(
+                    self.is_training
+                )
             )
 
             seq *= mask
 
-            seq = normalize(seq, scope='input_ln')
+            seq = normalize(
+                seq,
+                scope='input_ln'
+            )
 
             for i in range(num_blocks):
 
@@ -448,11 +530,17 @@ class Model():
                         scope="self_attention"
                     )
 
-                    seq = normalize(seq, scope='attention_out_ln')
+                    seq = normalize(
+                        seq,
+                        scope='attention_out_ln'
+                    )
 
                     seq = feedforward(
                         seq,
-                        num_units=[hidden_units, hidden_units],
+                        num_units=[
+                            hidden_units,
+                            hidden_units
+                        ],
                         dropout_rate=dropout_rate,
                         is_training=self.is_training
                     )
@@ -489,23 +577,35 @@ class Model():
             idx = tf.range(tn)
 
             idx = tf.reshape(
-                tf.concat([idx + tn, idx], axis=-1),
+                tf.concat(
+                    [idx + tn, idx],
+                    axis=-1
+                ),
                 [-1, 1]
             )
 
             if mask is not None:
                 sim_t += -100000 * mask
 
-            prob_sim = tf.nn.softmax(sim_t, axis=-1)
+            prob_sim = tf.nn.softmax(
+                sim_t,
+                axis=-1
+            )
 
             row_idx = tf.expand_dims(
                 tf.range(tf.shape(prob_sim)[0]),
                 1
             )
 
-            full_idx = tf.concat([row_idx, idx], axis=1)
+            full_idx = tf.concat(
+                [row_idx, idx],
+                axis=1
+            )
 
-            diag_part_sim = tf.gather_nd(prob_sim, full_idx)
+            diag_part_sim = tf.gather_nd(
+                prob_sim,
+                full_idx
+            )
 
             if weight is None:
 
@@ -516,7 +616,8 @@ class Model():
             else:
 
                 loss = tf.reduce_sum(
-                    -tf.log(diag_part_sim) * weight
+                    -tf.log(diag_part_sim) *
+                    weight
                 ) / tf.reduce_sum(weight)
 
             return loss, prob_sim
@@ -525,13 +626,23 @@ class Model():
     # Basic Loss
     # ==========================================================
 
-    def get_softmax_loss(self, prob, is_target):
+    def get_softmax_loss(
+            self,
+            prob,
+            is_target):
 
-        prob_t = tf.reshape(prob[:, :1], [-1])
+        prob_t = tf.reshape(
+            prob[:, :1],
+            [-1]
+        )
 
         return tf.reduce_sum(
-            -tf.log(prob_t + 1e-10) * is_target
-        ) / (tf.reduce_sum(is_target) + 1e-10)
+            -tf.log(prob_t + 1e-10) *
+            is_target
+        ) / (
+            tf.reduce_sum(is_target) +
+            1e-10
+        )
 
     # ==========================================================
     # KL Divergence
@@ -548,20 +659,7 @@ class Model():
         )
 
     # ==========================================================
-    # Jensen-Shannon Divergence
-    # ==========================================================
-
-    def js_divergence(self, p1, p2):
-
-        m = (p1 + p2) / 2.0
-
-        kl_1 = self.kl_divergence(p1, m)
-        kl_2 = self.kl_divergence(p2, m)
-
-        return (kl_1 + kl_2) / 2.0
-
-    # ==========================================================
-    # JS-based R-Dropout Loss
+    # KL-based R-Dropout Loss
     # ==========================================================
 
     def get_r_dropout_loss(
@@ -574,16 +672,26 @@ class Model():
         if w is None:
             w = tf.ones_like(prob1)
 
+        kl_loss = tf.reduce_sum(
+            self.kl_divergence(
+                prob1,
+                prob2
+            ) * w
+        )
+
+        kl_loss += tf.reduce_sum(
+            self.kl_divergence(
+                prob2,
+                prob1
+            ) * w
+        )
+
         if reduce == 'sum':
 
-            js_loss = tf.reduce_sum(
-                self.js_divergence(prob1, prob2) * w
-            )
+            return kl_loss / 2.0
 
         else:
 
-            js_loss = tf.reduce_sum(
-                self.js_divergence(prob1, prob2) * w
+            return (
+                kl_loss / 2.0
             ) / tf.reduce_sum(w)
-
-        return js_loss

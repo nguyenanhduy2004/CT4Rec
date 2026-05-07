@@ -6,6 +6,8 @@ class Model():
     def __init__(self, usernum, itemnum, args, reuse=None):
         self.global_step = tf.Variable(0, name='global_step', trainable=False)
         self.is_training = tf.placeholder(tf.bool, shape=())
+        self.dynamic_con_alpha = tf.placeholder(tf.float32, shape=())
+        self.dynamic_rd_alpha = tf.placeholder(tf.float32, shape=())
         self.u = tf.placeholder(tf.int32, shape=(None))
         self.input_seq = tf.placeholder(tf.int32, shape=(None, args.maxlen))
         self.pos = tf.placeholder(tf.int32, shape=(None, args.maxlen))
@@ -133,7 +135,7 @@ class Model():
             else:
                 self.ur_loss = 0.0
 
-        self.loss += self.ur_loss * args.con_alpha
+        self.loss += self.ur_loss * self.dynamic_con_alpha
 
         # r-dropout loss----------------------------------------------
         with tf.variable_scope("rd_loss"):
@@ -141,7 +143,7 @@ class Model():
                 self.rd_loss = self.get_r_dropout_loss(prob1=prob_first, prob2=prob_second, reduce=args.rd_reduce, w = istarget)
             else:
                 self.rd_loss = 0.0
-        self.loss += self.rd_loss * args.rd_alpha
+        self.loss += self.rd_loss * self.dynamic_rd_alpha
 
         tf.summary.scalar('basic_loss', self.loss_first, family='loss')
         tf.summary.scalar('loss', self.loss, family='loss')

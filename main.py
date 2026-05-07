@@ -99,12 +99,15 @@ def main():
                           , 'val_NDCG@1', 'val_HR@1', 'val_NDCG@5', 'val_HR@5', 'val_NDCG@10', 'val_HR@10', 'val_NDCG@20', 'val_HR@20'
                           , 'test_NDCG@1', 'test_HR@1', 'test_NDCG@5', 'test_HR@5', 'test_NDCG@10', 'test_HR@10', 'test_NDCG@20', 'test_HR@20']) + '\n')
         for epoch in range(1, args.num_epochs + 1):
+            progress = epoch / args.num_epochs
 
+            dynamic_con_alpha = args.con_alpha * progress
+            dynamic_rd_alpha = args.rd_alpha * progress
             for step in tqdm(range(num_batch), total=num_batch, ncols=70, leave=False, unit='b'):
                 u, seq, pos, neg = sampler.next_batch()
                 auc, loss, _, merged, g_step = sess.run([model.auc, model.loss, model.train_op, model.merged, model.global_step],
                                                         {model.u: u, model.input_seq: seq, model.pos: pos, model.neg: neg,
-                                                         model.is_training: True})
+                                                         model.is_training: True, model.dynamic_con_alpha: dynamic_con_alpha, model.dynamic_rd_alpha: dynamic_rd_alpha,})
                 global_step_val = g_step
                 if g_step % 50 == 0 or g_step <= 1:
                     train_writer.add_summary(merged, global_step=g_step)

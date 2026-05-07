@@ -99,7 +99,8 @@ def main():
                           , 'val_NDCG@1', 'val_HR@1', 'val_NDCG@5', 'val_HR@5', 'val_NDCG@10', 'val_HR@10', 'val_NDCG@20', 'val_HR@20'
                           , 'test_NDCG@1', 'test_HR@1', 'test_NDCG@5', 'test_HR@5', 'test_NDCG@10', 'test_HR@10', 'test_NDCG@20', 'test_HR@20']) + '\n')
         for epoch in range(1, args.num_epochs + 1):
-            progress = epoch / args.num_epochs
+            warmup_epochs = 20
+            progress = min(epoch / warmup_epochs, 1.0)
 
             dynamic_con_alpha = args.con_alpha * progress
             dynamic_rd_alpha = args.rd_alpha * progress
